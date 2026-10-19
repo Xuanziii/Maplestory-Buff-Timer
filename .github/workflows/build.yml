@@ -24,12 +24,16 @@ jobs:
           pip install pyinstaller
           pip install pywin32 keyboard pyautogui pillow pystray
 
-      - name: 4. 打包成 EXE (包含自訂 Icon 與系統管理員權限)
+      - name: 4. 自動產生高畫質全尺寸 Icon (若有上傳 icon.png)
         run: |
-          pyinstaller --noconsole --onefile --uac-admin --icon=icon.ico --name="MapleStoryBuffTimer" maplestory_buff_timer.py
+          python -c "import os; from PIL import Image; Image.open('icon.png').save('icon.ico', format='ICO', sizes=[(256,256), (128,128), (64,64), (48,48), (32,32), (16,16)]) if os.path.exists('icon.png') else print('Using existing icon.ico')"
 
-      - name: 5. 匯出編譯好的 EXE 供下載
+      - name: 5. 打包成 EXE (含左上角圖示與管理員權限)
+        run: |
+          pyinstaller --noconsole --onefile --uac-admin --icon=icon.ico --add-data "icon.ico;." --name="MapleStoryBuffTimer" maplestory_buff_timer.py
+
+      - name: 6. 匯出編譯好的 EXE 供下載
         uses: actions/upload-artifact@v4
         with:
-          name: Windows-Executable
+          name: MapleStoryBuffTimer
           path: dist/*.exe
