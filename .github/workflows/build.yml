@@ -1,0 +1,37 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: 1. 下載程式碼到雲端環境
+        uses: actions/checkout@v4
+
+      - name: 2. 安裝 Python 環境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 3. 安裝打包工具與程式需要的套件
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          # 請確認這裡包含你程式實際用到的所有外部套件
+          pip install pywin32 keyboard pyautogui pillow pystray
+
+      - name: 4. 打包成 EXE (包含自訂 Icon 與系統管理員權限)
+        run: |
+          # 加入 --uac-admin 參數，並請確認最後的 main.py 與你的檔名一致
+          pyinstaller --noconsole --onefile --uac-admin --icon=icon.ico --name="MyCustomApp" main.py
+
+      - name: 5. 匯出編譯好的 EXE 供下載
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-Executable
+          path: dist/*.exe
