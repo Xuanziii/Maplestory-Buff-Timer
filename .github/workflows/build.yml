@@ -22,13 +22,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # 請確認這裡包含你程式實際用到的所有外部套件
           pip install pywin32 keyboard pyautogui pillow pystray
 
       - name: 4. 打包成 EXE (包含自訂 Icon 與系統管理員權限)
         run: |
-          # 加入 --uac-admin 參數，並請確認最後的 main.py 與你的檔名一致
-          pyinstaller --noconsole --onefile --uac-admin --icon=icon.ico --name="MyCustomApp" main.py
+          pyinstaller --noconsole --onefile --uac-admin --icon=icon.ico --name="MapleStoryBuffTimer" maplestory_buff_timer.py
 
       - name: 5. 匯出編譯好的 EXE 供下載
         uses: actions/upload-artifact@v4
