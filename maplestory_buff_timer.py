@@ -4,19 +4,14 @@
 楓之谷懷舊服 Buff 技能倒數提醒工具 (MapleStory Classic Buff Timer)
 ==================================================================
 功能特點：
-1. 現代簡潔 UI，支援「深色主題 (Dark)」與「淺色主題 (Light)」一鍵切換，並支援視窗置頂。
+1. 現代極簡扁平化 UI (CustomTkinter)，微圓角卡片設計，支援「深色模式」與「淺色模式」即時切換，並支援視窗置頂。
 2. 內建 6 組獨立計時器，每組皆可隨時切換「啟用 / 停用」。
-3. 自訂技能名稱、觸發按鍵（支援點擊後直接按鍵綁定）、倒數秒數、提醒音效（內建 4 種合成音效 + 支援自選 .wav/.mp3 檔案）。
+3. 自訂技能名稱、觸發按鍵（支援點擊後直接按鍵綁定）、倒數秒數（支援秒數或 分:秒）、提醒音效（內建 4 種合成音效 + 支援自選 .wav/.mp3 檔案）。
 4. 開啟程式即自動全局監控鍵盤：
    - 首次按下綁定按鍵：開始倒數計時。
    - 計時途中再次按下該按鍵：自動重置並重新開始倒數。
    - 支援多個啟用中的計時器綁定同一個按鍵（例如遊戲內組合技宏）。
 5. 所有設定變更時自動儲存至同目錄下的 `buff_timer_config.json`，下次開啟自動還原。
-
-執行環境說明：
-- Windows 系統：直接使用 Python 內建標準庫 (`tkinter`, `ctypes`, `winsound`) 即可完整運行（免安裝額外套件）。
-  ※ 提示：若楓之谷以「系統管理員身分」執行，請同樣以「系統管理員身分」執行本程式，確保全局鍵盤監控在遊戲視窗內生效。
-- macOS / Linux 系統：建議安裝 `pynput` (`pip install pynput`) 以支援跨平台全局鍵盤監控。
 """
 
 import ctypes
@@ -31,8 +26,9 @@ import tempfile
 import threading
 import time
 import wave
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
+
+import customtkinter as ctk
 
 # 嘗試載入選用的跨平台鍵盤監聽套件 (非 Windows 環境備援)
 try:
@@ -92,49 +88,30 @@ TK_KEYSYM_NORMALIZE = {
 
 
 # ==============================================================================
-# 主題配色定義 (Dark & Light Themes)
+# 現代極簡扁平化配色 (Light, Dark) Tuple
 # ==============================================================================
-THEMES = {
-    "dark": {
-        "bg": "#0F172A",           # 主視窗背景 (深藍灰)
-        "card_bg": "#1E293B",      # 計時器卡片背景
-        "card_active": "#1E3A5F",  # 計時中卡片微亮背景
-        "card_expired": "#3B1D2E", # 時間到提醒背景
-        "card_border": "#334155",  # 邊框顏色
-        "text_primary": "#F8FAFC", # 主要文字
-        "text_secondary": "#94A3B8", # 次要文字
-        "entry_bg": "#0F172A",     # 輸入框背景
-        "entry_fg": "#F8FAFC",     # 輸入框文字
-        "btn_bg": "#334155",       # 一般按鈕背景
-        "btn_fg": "#F1F5F9",       # 一般按鈕文字
-        "btn_hover": "#475569",    # 按鈕滑過
-        "accent": "#38BDF8",       # 主強調色 (天空藍)
-        "accent_fg": "#0F172A",
-        "success": "#22C55E",      # 啟用 / 進行中綠
-        "warning": "#F59E0B",      # 即將到期橘黃
-        "danger": "#EF4444",       # 到期紅
-        "progress_bg": "#0F172A",  # 進度條底色
-    },
-    "light": {
-        "bg": "#F1F5F9",           # 主視窗背景 (淺雲灰)
-        "card_bg": "#FFFFFF",      # 計時器卡片背景
-        "card_active": "#EFF6FF",  # 計時中卡片微亮背景
-        "card_expired": "#FEF2F2", # 時間到提醒背景
-        "card_border": "#CBD5E1",  # 邊框顏色
-        "text_primary": "#0F172A", # 主要文字
-        "text_secondary": "#64748B", # 次要文字
-        "entry_bg": "#F8FAFC",     # 輸入框背景
-        "entry_fg": "#0F172A",     # 輸入框文字
-        "btn_bg": "#E2E8F0",       # 一般按鈕背景
-        "btn_fg": "#1E293B",       # 一般按鈕文字
-        "btn_hover": "#CBD5E1",    # 按鈕滑過
-        "accent": "#0284C7",       # 主強調色 (寶藍)
-        "accent_fg": "#FFFFFF",
-        "success": "#16A34A",      # 啟用 / 進行中綠
-        "warning": "#D97706",      # 即將到期橘黃
-        "danger": "#DC2626",       # 到期紅
-        "progress_bg": "#E2E8F0",  # 進度條底色
-    },
+PALETTE = {
+    "bg": ("#F4F5F7", "#111827"),
+    "surface": ("#FFFFFF", "#1F2937"),
+    "surface_active": ("#F0F9FF", "#172554"),
+    "surface_expired": ("#FEF2F2", "#450A0A"),
+    "border": ("#E5E7EB", "#374151"),
+    "border_active": ("#0284C7", "#38BDF8"),
+    "border_warning": ("#D97706", "#F59E0B"),
+    "border_expired": ("#DC2626", "#EF4444"),
+    "text_primary": ("#111827", "#F9FAFB"),
+    "text_secondary": ("#6B7280", "#9CA3AF"),
+    "text_muted": ("#9CA3AF", "#6B7280"),
+    "input_bg": ("#F9FAFB", "#111827"),
+    "control_bg": ("#F3F4F6", "#374151"),
+    "control_hover": ("#E5E7EB", "#4B5563"),
+    "accent": ("#0284C7", "#38BDF8"),
+    "accent_hover": ("#0369A1", "#0EA5E9"),
+    "accent_text": ("#FFFFFF", "#0F172A"),
+    "success": ("#16A34A", "#22C55E"),
+    "warning": ("#D97706", "#F59E0B"),
+    "danger": ("#DC2626", "#EF4444"),
+    "progress_track": ("#E5E7EB", "#111827"),
 }
 
 
@@ -142,12 +119,13 @@ THEMES = {
 # 內建提醒音效合成器 (自動生成高音質 WAV 音效，免外部檔案依賴)
 # ==============================================================================
 BUILTIN_SOUNDS = {
-    "bell": "🔔 清脆雙響鈴 (預設)",
+    "bell": "🔔 清脆雙響鈴",
     "chime": "✨ 柔和上升和弦",
     "beep": "⚡ 高頻急促提示",
     "horn": "📯 渾厚低音號角",
     "custom": "🎵 自訂音效檔案...",
 }
+LABEL_TO_SOUND_KEY = {label: key for key, label in BUILTIN_SOUNDS.items()}
 
 
 class SoundManager:
@@ -162,7 +140,6 @@ class SoundManager:
     def _generate_builtin_wavs(self):
         """預先合成 4 種不同風格的 WAV 提示音"""
         presets = {
-            # (頻率序列, 每段秒數, 音量衰減)
             "bell": [(880, 0.12), (0, 0.04), (1174.66, 0.22)],
             "chime": [(523.25, 0.10), (659.25, 0.10), (783.99, 0.12), (1046.50, 0.25)],
             "beep": [(1400, 0.08), (0, 0.04), (1400, 0.08), (0, 0.04), (1400, 0.12)],
@@ -183,9 +160,7 @@ class SoundManager:
                             val = 0
                         else:
                             t = i / sample_rate
-                            # 加入泛音與指數衰減包絡線，讓聲音清脆不刺耳
                             envelope = math.exp(-3.5 * (i / num_samples))
-                            # 前 5ms 淡入避免爆音
                             fade_in = min(1.0, i / (sample_rate * 0.005))
                             wave_val = (
                                 0.75 * math.sin(2 * math.pi * freq * t)
@@ -228,7 +203,6 @@ class SoundManager:
                     return
                 except Exception:
                     pass
-            # 使用 Windows 內建 MCI 介面播放 MP3 或其他音訊格式
             alias = f"sound_{int(time.time() * 1000) % 100000}"
             try:
                 mci = ctypes.windll.winmm.mciSendStringW
@@ -238,7 +212,6 @@ class SoundManager:
             except Exception:
                 winsound.MessageBeep(winsound.MB_OK)
         else:
-            # macOS / Linux 系統音效播放支援
             for cmd in (["afplay", filepath], ["aplay", "-q", filepath], ["paplay", filepath]):
                 try:
                     subprocess.run(
@@ -315,25 +288,24 @@ DEFAULT_CONFIG = {
 
 
 # ==============================================================================
-# 單一計時器列 UI 與狀態元件 (TimerRow)
+# 單一計時器卡片元件 (TimerCard)
 # ==============================================================================
-class TimerRow:
+class TimerCard:
     def __init__(self, parent, index: int, data: dict, app):
         self.parent = parent
         self.index = index
         self.app = app
 
-        # 設定資料
-        self.enabled_var = tk.BooleanVar(value=bool(data.get("enabled", False)))
-        self.name_var = tk.StringVar(value=str(data.get("name", f"技能 {index + 1}")))
+        self.enabled_var = ctk.BooleanVar(value=bool(data.get("enabled", False)))
+        self.name_var = ctk.StringVar(value=str(data.get("name", f"技能 {index + 1}")))
         self.vk_name = str(data.get("vk_name", "F1")).upper()
-        self.duration_var = tk.StringVar(value=str(data.get("duration", 120)))
+        self.duration_var = ctk.StringVar(value=str(data.get("duration", 120)))
         self.sound_key = str(data.get("sound", "bell"))
         if self.sound_key not in BUILTIN_SOUNDS:
             self.sound_key = "bell"
         self.custom_sound_path = str(data.get("custom_sound_path", ""))
 
-        # 計時狀態: "standby" (待命), "running" (倒數中), "expired" (請補放!)
+        # 計時狀態: "standby" | "running" | "expired"
         self.state = "standby"
         self.end_timestamp = 0.0
         self.total_duration = self._parse_duration()
@@ -356,126 +328,164 @@ class TimerRow:
             return 120
 
     def _build_ui(self):
-        # 外框卡片
-        self.card = tk.Frame(
+        font_ui = ctk.CTkFont(family="Microsoft JhengHei UI", size=12)
+        font_ui_bold = ctk.CTkFont(family="Microsoft JhengHei UI", size=12, weight="bold")
+        font_mono = ctk.CTkFont(family="Consolas", size=12, weight="bold")
+        font_timer = ctk.CTkFont(family="Consolas", size=15, weight="bold")
+
+        # 外層微圓角卡片
+        self.card = ctk.CTkFrame(
             self.parent,
-            bd=0,
-            highlightthickness=1,
-            padx=12,
-            pady=10,
+            corner_radius=10,
+            border_width=1,
+            fg_color=PALETTE["surface"],
+            border_color=PALETTE["border"],
         )
-        self.card.pack(fill="x", pady=5)
+        self.card.pack(fill="x", pady=4)
 
-        # 上排：啟用開關 | 技能名稱 | 按鍵綁定 | 倒數秒數 | 音效選單 | 試聽 | 剩餘時間與狀態
-        top_row = tk.Frame(self.card, bd=0)
-        top_row.pack(fill="x")
-        self.top_row = top_row
+        # 上排主控制列
+        top_row = ctk.CTkFrame(self.card, fg_color="transparent")
+        top_row.pack(fill="x", padx=12, pady=(10, 6))
 
-        # 1. 啟用/停用切換按鈕
-        self.toggle_btn = tk.Button(
+        # 1. 啟用/停用開關
+        self.enable_switch = ctk.CTkSwitch(
             top_row,
-            text="啟用" if self.enabled_var.get() else "停用",
-            width=6,
-            relief="flat",
-            font=("Microsoft JhengHei UI", 9, "bold"),
-            cursor="hand2",
-            command=self.toggle_enable,
+            text="",
+            variable=self.enabled_var,
+            width=38,
+            switch_width=34,
+            switch_height=18,
+            progress_color=PALETTE["success"],
+            button_color=("#FFFFFF", "#F9FAFB"),
+            fg_color=PALETTE["control_bg"],
+            command=self._on_toggle_enable,
         )
-        self.toggle_btn.pack(side="left", padx=(0, 8))
+        self.enable_switch.pack(side="left", padx=(0, 8))
 
         # 2. 技能名稱輸入框
-        self.name_entry = tk.Entry(
+        self.name_entry = ctk.CTkEntry(
             top_row,
             textvariable=self.name_var,
-            width=16,
-            relief="flat",
-            highlightthickness=1,
-            font=("Microsoft JhengHei UI", 10),
+            width=155,
+            height=30,
+            corner_radius=6,
+            border_width=1,
+            font=font_ui,
+            fg_color=PALETTE["input_bg"],
+            border_color=PALETTE["border"],
+            text_color=PALETTE["text_primary"],
         )
-        self.name_entry.pack(side="left", padx=(0, 8), ipady=3)
+        self.name_entry.pack(side="left", padx=(0, 8))
 
         # 3. 觸發按鍵綁定按鈕
-        self.key_btn = tk.Button(
+        self.key_btn = ctk.CTkButton(
             top_row,
-            text=f"按鍵: {self.vk_name}",
-            width=12,
-            relief="flat",
-            font=("Consolas", 10, "bold"),
-            cursor="hand2",
+            text=self.vk_name,
+            width=92,
+            height=30,
+            corner_radius=6,
+            border_width=1,
+            font=font_mono,
+            fg_color=PALETTE["control_bg"],
+            hover_color=PALETTE["control_hover"],
+            border_color=PALETTE["border"],
+            text_color=PALETTE["accent"],
             command=self.start_key_capture,
         )
-        self.key_btn.pack(side="left", padx=(0, 8), ipady=1)
+        self.key_btn.pack(side="left", padx=(0, 8))
 
-        # 4. 倒數時間輸入框 (秒)
-        self.sec_label_prefix = tk.Label(
-            top_row, text="秒數:", font=("Microsoft JhengHei UI", 9)
-        )
-        self.sec_label_prefix.pack(side="left", padx=(2, 3))
-
-        self.duration_entry = tk.Entry(
+        # 4. 倒數時間輸入 (秒 / 分:秒)
+        self.duration_entry = ctk.CTkEntry(
             top_row,
             textvariable=self.duration_var,
-            width=6,
+            width=60,
+            height=30,
+            corner_radius=6,
+            border_width=1,
             justify="center",
-            relief="flat",
-            highlightthickness=1,
-            font=("Consolas", 10, "bold"),
+            font=font_mono,
+            fg_color=PALETTE["input_bg"],
+            border_color=PALETTE["border"],
+            text_color=PALETTE["text_primary"],
         )
-        self.duration_entry.pack(side="left", padx=(0, 8), ipady=3)
+        self.duration_entry.pack(side="left", padx=(0, 3))
 
-        # 5. 音效選擇按鈕 (點擊展開選單或瀏覽檔案)
-        self.sound_btn = tk.Button(
+        self.sec_label = ctk.CTkLabel(
             top_row,
-            text=self._get_sound_display_name(),
-            width=16,
-            relief="flat",
-            font=("Microsoft JhengHei UI", 9),
-            cursor="hand2",
-            command=self.show_sound_menu,
+            text="秒",
+            font=font_ui,
+            text_color=PALETTE["text_secondary"],
         )
-        self.sound_btn.pack(side="left", padx=(0, 4), ipady=1)
+        self.sec_label.pack(side="left", padx=(0, 10))
+
+        # 5. 音效下拉選單
+        self.sound_menu = ctk.CTkOptionMenu(
+            top_row,
+            values=list(BUILTIN_SOUNDS.values()),
+            width=148,
+            height=30,
+            corner_radius=6,
+            font=font_ui,
+            dropdown_font=font_ui,
+            fg_color=PALETTE["control_bg"],
+            button_color=PALETTE["control_bg"],
+            button_hover_color=PALETTE["control_hover"],
+            text_color=PALETTE["text_primary"],
+            command=self._on_sound_selected,
+        )
+        self.sound_menu.set(self._get_sound_display_name())
+        self.sound_menu.pack(side="left", padx=(0, 4))
 
         # 6. 試聽音效按鈕
-        self.test_sound_btn = tk.Button(
+        self.test_sound_btn = ctk.CTkButton(
             top_row,
             text="🔊",
-            width=3,
-            relief="flat",
-            font=("Segoe UI Emoji", 9),
-            cursor="hand2",
+            width=32,
+            height=30,
+            corner_radius=6,
+            font=font_ui,
+            fg_color=PALETTE["control_bg"],
+            hover_color=PALETTE["control_hover"],
+            text_color=PALETTE["text_primary"],
             command=self.play_alert_sound,
         )
-        self.test_sound_btn.pack(side="left", padx=(0, 10), ipady=1)
+        self.test_sound_btn.pack(side="left", padx=(0, 8))
 
         # 7. 右側：重置按鈕 + 倒數狀態與時間顯示
-        self.reset_btn = tk.Button(
+        self.reset_btn = ctk.CTkButton(
             top_row,
             text="重置",
-            width=5,
-            relief="flat",
-            font=("Microsoft JhengHei UI", 9),
-            cursor="hand2",
+            width=50,
+            height=30,
+            corner_radius=6,
+            font=font_ui_bold,
+            fg_color=PALETTE["control_bg"],
+            hover_color=PALETTE["control_hover"],
+            text_color=PALETTE["text_secondary"],
             command=self.reset_to_standby,
         )
-        self.reset_btn.pack(side="right", padx=(6, 0))
+        self.reset_btn.pack(side="right", padx=(8, 0))
 
-        self.timer_display = tk.Label(
+        self.timer_display = ctk.CTkLabel(
             top_row,
             text="待命中",
-            width=11,
+            width=106,
             anchor="e",
-            font=("Consolas", 13, "bold"),
+            font=font_timer,
+            text_color=PALETTE["text_secondary"],
         )
         self.timer_display.pack(side="right")
 
-        # 下排：視覺化進度條 Canvas
-        self.progress_canvas = tk.Canvas(
-            self.card, height=6, bd=0, highlightthickness=0
+        # 下排：極簡扁平進度條
+        self.progress_bar = ctk.CTkProgressBar(
+            self.card,
+            height=5,
+            corner_radius=3,
+            fg_color=PALETTE["progress_track"],
+            progress_color=PALETTE["accent"],
         )
-        self.progress_canvas.pack(fill="x", pady=(8, 0))
-        self.progress_rect = self.progress_canvas.create_rectangle(
-            0, 0, 0, 6, width=0
-        )
+        self.progress_bar.set(0)
+        self.progress_bar.pack(fill="x", padx=12, pady=(0, 10))
 
     def _bind_traces(self):
         self.name_var.trace_add("write", lambda *_: self.app.save_config())
@@ -483,6 +493,8 @@ class TimerRow:
 
     def _on_duration_changed(self, *_):
         self.total_duration = self._parse_duration()
+        if self.state == "standby":
+            self._update_timer_text_and_bar()
         self.app.save_config()
 
     def _get_sound_display_name(self) -> str:
@@ -491,22 +503,13 @@ class TimerRow:
             return f"🎵 {base[:10]}..." if len(base) > 10 else f"🎵 {base}"
         return BUILTIN_SOUNDS.get(self.sound_key, BUILTIN_SOUNDS["bell"])
 
-    def show_sound_menu(self):
-        """彈出音效選擇選單"""
-        menu = tk.Menu(self.app.root, tearoff=0, font=("Microsoft JhengHei UI", 9))
-        for key, label in BUILTIN_SOUNDS.items():
-            menu.add_command(
-                label=label,
-                command=lambda k=key: self._select_sound(k),
-            )
-        x = self.sound_btn.winfo_rootx()
-        y = self.sound_btn.winfo_rooty() + self.sound_btn.winfo_height()
-        menu.tk_popup(x, y)
-
-    def _select_sound(self, key: str):
+    def _on_sound_selected(self, selected_label: str):
+        key = LABEL_TO_SOUND_KEY.get(selected_label)
+        if key is None:
+            return
         if key == "custom":
             filepath = filedialog.askopenfilename(
-                parent=self.app.root,
+                parent=self.app,
                 title=f"選擇【{self.name_var.get()}】的提醒音效檔案",
                 filetypes=[
                     ("音訊檔案 (*.wav; *.mp3)", "*.wav *.mp3"),
@@ -521,17 +524,15 @@ class TimerRow:
         else:
             self.sound_key = key
 
-        self.sound_btn.config(text=self._get_sound_display_name())
+        self.sound_menu.set(self._get_sound_display_name())
         self.app.save_config()
         self.play_alert_sound()
 
     def play_alert_sound(self):
         self.app.sound_manager.play(self.sound_key, self.custom_sound_path)
 
-    def toggle_enable(self):
-        new_state = not self.enabled_var.get()
-        self.enabled_var.set(new_state)
-        if not new_state:
+    def _on_toggle_enable(self):
+        if not self.enabled_var.get():
             self.state = "standby"
             self.remaining_seconds = 0.0
         self.app.save_config()
@@ -543,7 +544,6 @@ class TimerRow:
 
     def set_bound_key(self, vk_name: str):
         self.vk_name = vk_name.upper()
-        self.key_btn.config(text=f"按鍵: {self.vk_name}")
         self.app.save_config()
         self.update_visuals()
 
@@ -585,103 +585,73 @@ class TimerRow:
         return f"{m:02d}:{s:02d}"
 
     def _update_timer_text_and_bar(self):
-        t = THEMES[self.app.current_theme]
-        canvas_w = max(1, self.progress_canvas.winfo_width())
-
         if not self.enabled_var.get():
-            self.timer_display.config(text="已停用", fg=t["text_secondary"])
-            self.progress_canvas.coords(self.progress_rect, 0, 0, 0, 6)
+            self.timer_display.configure(text="已停用", text_color=PALETTE["text_muted"])
+            self.progress_bar.set(0)
             return
 
         if self.state == "standby":
-            self.timer_display.config(
-                text=f"待命 ({self._format_time(self.total_duration)})",
-                fg=t["text_secondary"],
+            self.timer_display.configure(
+                text=f"待命 {self._format_time(self.total_duration)}",
+                text_color=PALETTE["text_secondary"],
             )
-            self.progress_canvas.coords(self.progress_rect, 0, 0, 0, 6)
+            self.progress_bar.set(0)
         elif self.state == "running":
             ratio = max(0.0, min(1.0, self.remaining_seconds / max(1, self.total_duration)))
-            bar_w = int(canvas_w * ratio)
-            # 剩餘低於 10 秒或 15% 時轉為橘黃色提醒
-            if self.remaining_seconds <= 10 or ratio <= 0.15:
-                color = t["warning"]
-            else:
-                color = t["accent"]
-            self.timer_display.config(
-                text=self._format_time(self.remaining_seconds), fg=color
+            is_warning = self.remaining_seconds <= 10 or ratio <= 0.15
+            color = PALETTE["warning"] if is_warning else PALETTE["accent"]
+            border_color = PALETTE["border_warning"] if is_warning else PALETTE["border_active"]
+
+            self.timer_display.configure(
+                text=self._format_time(self.remaining_seconds),
+                text_color=color,
             )
-            self.progress_canvas.coords(self.progress_rect, 0, 0, bar_w, 6)
-            self.progress_canvas.itemconfig(self.progress_rect, fill=color)
+            self.progress_bar.configure(progress_color=color)
+            self.progress_bar.set(ratio)
+            self.card.configure(border_color=border_color)
         elif self.state == "expired":
-            self.timer_display.config(text="請補放技能!", fg=t["danger"])
-            self.progress_canvas.coords(self.progress_rect, 0, 0, canvas_w, 6)
-            self.progress_canvas.itemconfig(self.progress_rect, fill=t["danger"])
+            self.timer_display.configure(text="請補放技能!", text_color=PALETTE["danger"])
+            self.progress_bar.configure(progress_color=PALETTE["danger"])
+            self.progress_bar.set(1.0)
 
     def update_visuals(self):
-        """套用主題色彩與當前狀態樣式"""
-        t = THEMES[self.app.current_theme]
+        """套用目前狀態樣式"""
         is_enabled = self.enabled_var.get()
 
         if not is_enabled:
-            card_bg = t["card_bg"]
+            fg = PALETTE["surface"]
+            border = PALETTE["border"]
         elif self.state == "expired":
-            card_bg = t["card_expired"]
+            fg = PALETTE["surface_expired"]
+            border = PALETTE["border_expired"]
         elif self.state == "running":
-            card_bg = t["card_active"]
+            fg = PALETTE["surface_active"]
+            border = PALETTE["border_active"]
         else:
-            card_bg = t["card_bg"]
+            fg = PALETTE["surface"]
+            border = PALETTE["border"]
 
-        self.card.config(
-            bg=card_bg,
-            highlightbackground=(
-                t["danger"]
-                if (is_enabled and self.state == "expired")
-                else (t["accent"] if (is_enabled and self.state == "running") else t["card_border"])
-            ),
-        )
-        self.top_row.config(bg=card_bg)
-        self.sec_label_prefix.config(bg=card_bg, fg=t["text_secondary"])
-        self.timer_display.config(bg=card_bg)
-        self.progress_canvas.config(bg=t["progress_bg"])
+        self.card.configure(fg_color=fg, border_color=border)
 
-        # 啟用/停用按鈕樣式
-        if is_enabled:
-            self.toggle_btn.config(
-                text="✔ 啟用", bg=t["success"], fg="#FFFFFF", activebackground=t["success"]
-            )
-        else:
-            self.toggle_btn.config(
-                text="停用", bg=t["btn_bg"], fg=t["text_secondary"], activebackground=t["btn_hover"]
-            )
-
-        # 輸入框與按鈕樣式
-        for entry in (self.name_entry, self.duration_entry):
-            entry.config(
-                bg=t["entry_bg"],
-                fg=t["entry_fg"] if is_enabled else t["text_secondary"],
-                insertbackground=t["text_primary"],
-                highlightbackground=t["card_border"],
-                highlightcolor=t["accent"],
-            )
+        text_col = PALETTE["text_primary"] if is_enabled else PALETTE["text_muted"]
+        self.name_entry.configure(text_color=text_col)
+        self.duration_entry.configure(text_color=text_col)
 
         if self.app.listening_row is self:
-            self.key_btn.config(
-                text="請按任意鍵...", bg=t["warning"], fg="#FFFFFF"
+            self.key_btn.configure(
+                text="請按任意鍵...",
+                fg_color=PALETTE["warning"],
+                hover_color=PALETTE["warning"],
+                border_color=PALETTE["warning"],
+                text_color="#FFFFFF",
             )
         else:
-            self.key_btn.config(
-                text=f"按鍵: {self.vk_name}",
-                bg=t["btn_bg"],
-                fg=t["accent"] if is_enabled else t["text_secondary"],
-                activebackground=t["btn_hover"],
-            )
-
-        for btn in (self.sound_btn, self.test_sound_btn, self.reset_btn):
-            btn.config(
-                bg=t["btn_bg"],
-                fg=t["btn_fg"],
-                activebackground=t["btn_hover"],
-                activeforeground=t["text_primary"],
+            self.key_btn.configure(
+                text=self.vk_name,
+                fg_color=PALETTE["control_bg"],
+                hover_color=PALETTE["control_hover"],
+                border_color=PALETTE["border"],
+                text_color=PALETTE["accent"] if is_enabled else PALETTE["text_muted"],
             )
 
         self._update_timer_text_and_bar()
@@ -701,40 +671,58 @@ class TimerRow:
 # ==============================================================================
 # 主應用程式 (MapleBuffTimerApp)
 # ==============================================================================
-class MapleBuffTimerApp:
+class MapleBuffTimerApp(ctk.CTk):
     CONFIG_FILENAME = "buff_timer_config.json"
 
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        self.root.title("🍁 楓之谷懷舊服 Buff 技能計時提醒器")
-        self.root.geometry("780x540")
-        self.root.minsize(740, 500)
+    def __init__(self):
+        super().__init__()
 
-        self.config_path = os.path.join(
-            os.path.dirname(os.path.abspath(sys.argv[0])), self.CONFIG_FILENAME
-        )
+        if getattr(sys, "frozen", False):
+            self.base_dir = os.path.dirname(os.path.abspath(sys.executable))
+            self.resource_dir = getattr(sys, "_MEIPASS", self.base_dir)
+        else:
+            self.base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            self.resource_dir = self.base_dir
+
+        self.config_path = os.path.join(self.base_dir, self.CONFIG_FILENAME)
         self.sound_manager = SoundManager()
         self.config_data = self._load_config()
 
         self.current_theme = self.config_data.get("theme", "dark")
-        if self.current_theme not in THEMES:
+        if self.current_theme not in ("dark", "light"):
             self.current_theme = "dark"
 
+        ctk.set_appearance_mode(self.current_theme)
+        ctk.set_default_color_theme("blue")
+
+        self.title("楓之谷懷舊服 Buff 技能計時提醒器")
+        self.geometry("860x570")
+        self.minsize(800, 530)
+        self.configure(fg_color=PALETTE["bg"])
+
+        icon_path = os.path.join(self.resource_dir, "Icon.ico")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(self.base_dir, "Icon.ico")
+        if IS_WINDOWS and os.path.exists(icon_path):
+            try:
+                self.iconbitmap(default=icon_path)
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
+
         self.always_on_top = bool(self.config_data.get("always_on_top", True))
-        self.root.attributes("-topmost", self.always_on_top)
+        self.attributes("-topmost", self.always_on_top)
 
         self.listening_row = None
         self.rows = []
-        self._pressed_keys_state = set()  # 記錄目前按住的按鍵，避免長按重複觸發
+        self._pressed_keys_state = set()
 
         self._build_main_ui()
-        self.apply_theme()
+        self._update_header_controls()
 
-        # 綁定視窗內的按鍵事件（用於設定綁定按鍵，以及非 Windows 無 pynput 時的備援）
-        self.root.bind("<KeyPress>", self._on_tk_key_press)
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.bind("<KeyPress>", self._on_tk_key_press)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # 啟動全局鍵盤監控與計時更新迴圈
         self._start_global_keyboard_monitor()
         self._schedule_tick()
 
@@ -744,7 +732,6 @@ class MapleBuffTimerApp:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
                 if isinstance(loaded, dict) and "timers" in loaded:
-                    # 確保固定有 6 組計時器
                     timers = loaded["timers"][:6]
                     while len(timers) < 6:
                         timers.append(DEFAULT_CONFIG["timers"][len(timers)].copy())
@@ -769,148 +756,145 @@ class MapleBuffTimerApp:
             pass
 
     def _build_main_ui(self):
+        font_title = ctk.CTkFont(family="Microsoft JhengHei UI", size=17, weight="bold")
+        font_sub = ctk.CTkFont(family="Microsoft JhengHei UI", size=11)
+        font_ctrl = ctk.CTkFont(family="Microsoft JhengHei UI", size=12, weight="bold")
+
         # 頂部標題與控制列
-        self.header = tk.Frame(self.root, padx=18, pady=14)
-        self.header.pack(fill="x")
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=(16, 10))
 
-        title_box = tk.Frame(self.header)
+        title_box = ctk.CTkFrame(header, fg_color="transparent")
         title_box.pack(side="left")
-        self.title_box = title_box
 
-        self.title_label = tk.Label(
+        ctk.CTkLabel(
             title_box,
-            text="🍁 楓之谷 Buff 技能倒數提醒器",
-            font=("Microsoft JhengHei UI", 15, "bold"),
+            text="🍁 楓之谷 Buff 技能計時器",
+            font=font_title,
+            text_color=PALETTE["text_primary"],
             anchor="w",
-        )
-        self.title_label.pack(anchor="w")
+        ).pack(anchor="w")
 
-        self.subtitle_label = tk.Label(
+        ctk.CTkLabel(
             title_box,
-            text="全局鍵盤監控已啟動：遊戲中按下對應技能鍵自動開始計時，重複按鍵自動重新倒數",
-            font=("Microsoft JhengHei UI", 9),
+            text="全局鍵盤監控中 · 按下綁定鍵自動倒數，重複按下自動重置",
+            font=font_sub,
+            text_color=PALETTE["text_secondary"],
             anchor="w",
-        )
-        self.subtitle_label.pack(anchor="w", pady=(2, 0))
+        ).pack(anchor="w", pady=(2, 0))
 
-        # 右上角控制按鈕區
-        ctrl_box = tk.Frame(self.header)
-        ctrl_box.pack(side="right")
-        self.ctrl_box = ctrl_box
+        # 右上角控制列
+        ctrl_box = ctk.CTkFrame(header, fg_color="transparent")
+        ctrl_box.pack(side="right", anchor="center")
 
-        self.theme_btn = tk.Button(
+        self.reset_all_btn = ctk.CTkButton(
             ctrl_box,
-            text="☀️ 淺色主題" if self.current_theme == "dark" else "🌙 深色主題",
-            relief="flat",
-            padx=10,
-            pady=4,
-            font=("Microsoft JhengHei UI", 9, "bold"),
-            cursor="hand2",
-            command=self.toggle_theme,
-        )
-        self.theme_btn.pack(side="right", padx=(6, 0))
-
-        self.topmost_btn = tk.Button(
-            ctrl_box,
-            text="📌 視窗置頂: 開" if self.always_on_top else "📌 視窗置頂: 關",
-            relief="flat",
-            padx=10,
-            pady=4,
-            font=("Microsoft JhengHei UI", 9),
-            cursor="hand2",
-            command=self.toggle_topmost,
-        )
-        self.topmost_btn.pack(side="right", padx=(6, 0))
-
-        self.reset_all_btn = tk.Button(
-            ctrl_box,
-            text="🔄 全部重置",
-            relief="flat",
-            padx=10,
-            pady=4,
-            font=("Microsoft JhengHei UI", 9),
-            cursor="hand2",
+            text="全部重置",
+            width=76,
+            height=30,
+            corner_radius=8,
+            font=font_ctrl,
+            fg_color=PALETTE["control_bg"],
+            hover_color=PALETTE["control_hover"],
+            text_color=PALETTE["text_primary"],
             command=self.reset_all_timers,
         )
-        self.reset_all_btn.pack(side="right", padx=(6, 0))
+        self.reset_all_btn.pack(side="left", padx=(0, 8))
 
-        # 6 組計時器列表容器
-        self.list_container = tk.Frame(self.root, padx=18, pady=4)
-        self.list_container.pack(fill="both", expand=True)
+        self.topmost_btn = ctk.CTkButton(
+            ctrl_box,
+            text="置頂: 開",
+            width=76,
+            height=30,
+            corner_radius=8,
+            border_width=1,
+            font=font_ctrl,
+            command=self.toggle_topmost,
+        )
+        self.topmost_btn.pack(side="left", padx=(0, 8))
+
+        self.theme_switch = ctk.CTkSegmentedButton(
+            ctrl_box,
+            values=["淺色", "深色"],
+            height=30,
+            corner_radius=8,
+            font=font_ctrl,
+            fg_color=PALETTE["control_bg"],
+            selected_color=PALETTE["accent"],
+            selected_hover_color=PALETTE["accent_hover"],
+            unselected_color=PALETTE["control_bg"],
+            unselected_hover_color=PALETTE["control_hover"],
+            text_color=PALETTE["text_primary"],
+            command=self._on_theme_segment_changed,
+        )
+        self.theme_switch.set("深色" if self.current_theme == "dark" else "淺色")
+        self.theme_switch.pack(side="left")
+
+        # 6 組計時器卡片容器
+        list_container = ctk.CTkFrame(self, fg_color="transparent")
+        list_container.pack(fill="both", expand=True, padx=20, pady=2)
 
         for idx, timer_cfg in enumerate(self.config_data["timers"]):
-            row = TimerRow(self.list_container, idx, timer_cfg, self)
-            self.rows.append(row)
+            card = TimerCard(list_container, idx, timer_cfg, self)
+            card.update_visuals()
+            self.rows.append(card)
 
         # 底部狀態列
-        self.footer = tk.Frame(self.root, padx=18, pady=8)
-        self.footer.pack(fill="x")
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.pack(fill="x", padx=20, pady=(6, 12))
 
         monitor_mode = (
-            "Windows 原生全局監控 (User32 GetAsyncKeyState)"
+            "Windows 原生全局監控 (GetAsyncKeyState)"
             if IS_WINDOWS
-            else ("跨平台全局監控 (pynput)" if HAS_PYNPUT else "視窗焦點監控 (建議安裝 pynput 啟用背景監控)")
+            else ("跨平台全局監控 (pynput)" if HAS_PYNPUT else "視窗焦點監控 (建議安裝 pynput)")
         )
-        self.status_label = tk.Label(
-            self.footer,
-            text=f"🟢 監控狀態：{monitor_mode}  |  設定檔自動儲存於：{self.CONFIG_FILENAME}",
-            font=("Microsoft JhengHei UI", 8),
-        )
-        self.status_label.pack(side="left")
+        ctk.CTkLabel(
+            footer,
+            text=f"● {monitor_mode}  ·  設定自動儲存於 {self.CONFIG_FILENAME}",
+            font=font_sub,
+            text_color=PALETTE["text_secondary"],
+            anchor="w",
+        ).pack(side="left")
 
-    def toggle_theme(self):
-        self.current_theme = "light" if self.current_theme == "dark" else "dark"
-        self.apply_theme()
-        self.save_config()
+    def _on_theme_segment_changed(self, value: str):
+        new_theme = "dark" if value == "深色" else "light"
+        if new_theme != self.current_theme:
+            self.current_theme = new_theme
+            ctk.set_appearance_mode(self.current_theme)
+            self.save_config()
 
     def toggle_topmost(self):
         self.always_on_top = not self.always_on_top
-        self.root.attributes("-topmost", self.always_on_top)
-        self.apply_theme()
+        self.attributes("-topmost", self.always_on_top)
+        self._update_header_controls()
         self.save_config()
+
+    def _update_header_controls(self):
+        if self.always_on_top:
+            self.topmost_btn.configure(
+                text="📌 置頂: 開",
+                fg_color=PALETTE["surface_active"],
+                hover_color=PALETTE["control_hover"],
+                border_color=PALETTE["accent"],
+                text_color=PALETTE["accent"],
+            )
+        else:
+            self.topmost_btn.configure(
+                text="📌 置頂: 關",
+                fg_color=PALETTE["control_bg"],
+                hover_color=PALETTE["control_hover"],
+                border_color=PALETTE["border"],
+                text_color=PALETTE["text_secondary"],
+            )
 
     def reset_all_timers(self):
         for row in self.rows:
             row.reset_to_standby()
 
-    def apply_theme(self):
-        t = THEMES[self.current_theme]
-        self.root.config(bg=t["bg"])
-        self.header.config(bg=t["bg"])
-        self.title_box.config(bg=t["bg"])
-        self.ctrl_box.config(bg=t["bg"])
-        self.list_container.config(bg=t["bg"])
-        self.footer.config(bg=t["bg"])
-
-        self.title_label.config(bg=t["bg"], fg=t["text_primary"])
-        self.subtitle_label.config(bg=t["bg"], fg=t["text_secondary"])
-        self.status_label.config(bg=t["bg"], fg=t["text_secondary"])
-
-        self.theme_btn.config(
-            text="☀️ 切換淺色" if self.current_theme == "dark" else "🌙 切換深色",
-            bg=t["accent"],
-            fg=t["accent_fg"],
-            activebackground=t["btn_hover"],
-        )
-        self.topmost_btn.config(
-            text="📌 置頂: 開啟" if self.always_on_top else "📌 置頂: 關閉",
-            bg=t["btn_bg"],
-            fg=t["accent"] if self.always_on_top else t["text_secondary"],
-            activebackground=t["btn_hover"],
-        )
-        self.reset_all_btn.config(
-            bg=t["btn_bg"],
-            fg=t["btn_fg"],
-            activebackground=t["btn_hover"],
-        )
-
-        for row in self.rows:
-            row.update_visuals()
-
     # ==========================================================================
     # 按鍵綁定與全局鍵盤監控邏輯
     # ==========================================================================
-    def start_listening_for_row(self, row: TimerRow):
+    def start_listening_for_row(self, row: TimerCard):
         prev = self.listening_row
         self.listening_row = row
         if prev and prev is not row:
@@ -931,7 +915,6 @@ class MapleBuffTimerApp:
         if not key_name:
             return
 
-        # 若正在綁定按鍵模式
         if self.listening_row is not None:
             target_row = self.listening_row
             self.listening_row = None
@@ -941,7 +924,6 @@ class MapleBuffTimerApp:
                 target_row.update_visuals()
             return
 
-        # 若在非 Windows 且未安裝 pynput 環境下，提供視窗內按鍵觸發
         if not IS_WINDOWS and not HAS_PYNPUT:
             self._handle_global_key_trigger(key_name)
 
@@ -961,12 +943,6 @@ class MapleBuffTimerApp:
                 row.trigger_or_restart()
 
     def _start_global_keyboard_monitor(self):
-        """
-        啟動全局鍵盤監聽：
-        - Windows: 使用內建 ctypes.windll.user32.GetAsyncKeyState 進行高頻率邊緣偵測 (60Hz)，
-          不攔截遊戲封包、不吃鍵，且免安裝第三方套件。
-        - macOS / Linux: 若有安裝 pynput 則啟動 pynput.keyboard.Listener。
-        """
         if IS_WINDOWS:
             self._poll_windows_keys()
         elif HAS_PYNPUT:
@@ -980,7 +956,6 @@ class MapleBuffTimerApp:
     def _poll_windows_keys(self):
         """Windows 專用全局按鍵輪詢 (每 20ms 檢查一次按鍵按下瞬間)"""
         user32 = ctypes.windll.user32
-        # 若正在綁定新按鍵，掃描全部支援的按鍵；否則只掃描目前已啟用計時器綁定的按鍵以節省 CPU
         if self.listening_row is not None:
             keys_to_check = VK_MAP.items()
         else:
@@ -1000,7 +975,7 @@ class MapleBuffTimerApp:
                     self._handle_global_key_trigger(key_name)
 
         self._pressed_keys_state = currently_down
-        self.root.after(20, self._poll_windows_keys)
+        self.after(20, self._poll_windows_keys)
 
     def _normalize_pynput_key(self, key) -> str:
         try:
@@ -1033,7 +1008,7 @@ class MapleBuffTimerApp:
         key_name = self._normalize_pynput_key(key)
         if key_name and key_name not in self._pressed_keys_state:
             self._pressed_keys_state.add(key_name)
-            self.root.after(0, self._handle_global_key_trigger, key_name)
+            self.after(0, self._handle_global_key_trigger, key_name)
 
     def _on_pynput_release(self, key):
         key_name = self._normalize_pynput_key(key)
@@ -1044,27 +1019,34 @@ class MapleBuffTimerApp:
         now = time.monotonic()
         for row in self.rows:
             row.tick(now)
-        self.root.after(50, self._schedule_tick)
+        self.after(50, self._schedule_tick)
 
     def _on_close(self):
         self.save_config()
-        self.root.destroy()
+        self.destroy()
 
 
 def main():
-    # Windows 高 DPI 清晰字體支援
     if IS_WINDOWS:
         try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "MapleStory.BuffTimer.App"
+            )
+        except Exception:
+            pass
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
             try:
-                ctypes.windll.user32.SetProcessDPIAware()
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
             except Exception:
-                pass
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
 
-    root = tk.Tk()
-    MapleBuffTimerApp(root)
-    root.mainloop()
+    app = MapleBuffTimerApp()
+    app.mainloop()
 
 
 if __name__ == "__main__":
